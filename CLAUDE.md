@@ -10,8 +10,8 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 - Latência percebida (1–3 s) vale mais que transcrição perfeita. Corte/repetição de
   palavras no streaming é ajuste iterativo (fase 5), não bug a "resolver".
 - Sem APIs pagas na v1. Tradução offline (Argos Translate).
-- O dono do projeto gosta de implementar partes com decisões de design (modo
-  aprendizado): deixar TODOs bem delimitados com testes em vez de fazer tudo.
+- O Claude escreve todo o código (o dono não quer TODOs para ele implementar);
+  explicar as decisões de design em vez de delegá-las.
 - Conversa em português; código, identificadores e mensagens de commit em inglês.
 
 ## Comandos
@@ -50,21 +50,18 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 
 ## Onde paramos (atualizar ao fim de cada sessão)
 
-**2026-09-25 — Fase 1 quase concluída.**
+**2026-09-25 — Fase 1 concluída (falta só confirmar o isolamento).**
 
 Feito:
 - Listagem de streams, captura por stream, `StreamGone`, CLI `list`/`record`.
 - Menu interativo: sem argumento, `record` pergunta qual aba/app legendar.
-- Verificado na máquina: captura isolada do Firefox; app sumindo encerra a captura
-  sem cair no microfone.
+- `pick_stream` (atalho `record netflix`): título da aba > nome do app; tocando > pausado.
+- Verificado na máquina: dono capturou a aba do Netflix pelo menu (medidor de dBFS
+  reagindo); app sumindo encerra a captura sem cair no microfone.
 
-Pendente para fechar a fase 1:
-1. **Teste real** (dono): Netflix + Spotify tocando juntos → `record` escolhendo a aba
-   do Netflix → `pw-play` no WAV deve ter só o Netflix.
-2. **`pick_stream`** (`src/live_caption/audio/streams.py`, TODO do dono): testes em
-   `tests/test_streams.py` marcados `xfail(strict=True)` — remover o marcador ao
-   implementar. Decisão em aberto: o que fazer com vários streams do mesmo app
-   (priorizar `is_playing`?) e como reconhecer "a mesma aba" quando o título muda
-   (próximo episódio) — isso será reusado na reconexão da fase 5.
+Pendente:
+- Confirmar isolamento: Netflix + Spotify juntos → `record --out /tmp/n.wav` →
+  `pw-play /tmp/n.wav` só com o Netflix.
 
 Próximo: **Fase 2** — transcrição streaming com faster-whisper (ver `docs/PLAN.md`).
+Reconexão quando o título da aba muda (próximo episódio) fica para a fase 5.
