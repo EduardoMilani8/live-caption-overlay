@@ -7,10 +7,6 @@ from live_caption.audio.streams import parse_pw_dump, pick_stream
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pw_dump_sample.json"
 
-# pick_stream is still a TODO (see CLAUDE.md "Onde paramos"). strict=True makes
-# these fail as XPASS once it's implemented, reminding us to drop the marker.
-pending_pick = pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="pick_stream TODO")
-
 
 @pytest.fixture
 def streams():
@@ -33,21 +29,33 @@ def test_corked_stream_is_not_playing(streams):
     assert not streams[2].is_playing
 
 
-@pending_pick
 def test_pick_by_serial(streams):
     assert pick_stream(streams, "310").app_name == "Spotify"
 
 
-@pending_pick
 def test_pick_by_unique_app_name_is_case_insensitive(streams):
     assert pick_stream(streams, "spotify").serial == 310
 
 
-@pending_pick
 def test_pick_by_media_title(streams):
     assert pick_stream(streams, "netflix").serial == 204
 
 
-@pending_pick
 def test_pick_returns_none_when_nothing_matches(streams):
     assert pick_stream(streams, "vlc") is None
+
+
+def test_pick_prefers_playing_stream_of_same_app(streams):
+    # Netflix (playing) must win over the paused YouTube tab regardless of order
+    assert pick_stream(list(reversed(streams)), "firefox").serial == 204
+
+
+def test_pick_title_match_beats_app_match(streams):
+    # "fire" hits the Firefox app name, but a tab titled "Fire..." is more specific
+    from dataclasses import replace
+    tab = replace(streams[1], serial=999, app_name="Brave", binary="brave", media_name="Fireworks live")
+    assert pick_stream(streams + [tab], "fire").serial == 999
+
+
+def test_pick_paused_stream_when_it_is_the_only_match(streams):
+    assert pick_stream(streams, "lofi").serial == 315

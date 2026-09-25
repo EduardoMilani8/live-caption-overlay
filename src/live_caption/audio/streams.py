@@ -67,6 +67,25 @@ def pick_stream(streams: list[AudioStream], query: str) -> AudioStream | None:
 
     `query` may be a serial number ("204") or free text ("firefox", "netflix").
     Returns None when nothing reasonable matches.
+
+    Ranking: a tab-title match beats an app-name match (it's more specific),
+    and a playing stream beats a paused one of the same rank.
     """
-    # TODO(you): implement the selection policy — see notes in the chat.
-    raise NotImplementedError
+    query = query.strip()
+    if query.isdigit():
+        return next((s for s in streams if s.serial == int(query)), None)
+
+    needle = query.casefold()
+
+    def rank(s: AudioStream) -> tuple[int, int] | None:
+        if needle in s.media_name.casefold():
+            match = 0
+        elif needle in s.app_name.casefold() or needle in s.binary.casefold():
+            match = 1
+        else:
+            return None
+        return (match, 0 if s.is_playing else 1)
+
+    ranked = [(r, s) for s in streams if (r := rank(s)) is not None]
+    # min() keeps the first of equal ranks, i.e. pw-dump order.
+    return min(ranked, key=lambda rs: rs[0])[1] if ranked else None
