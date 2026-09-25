@@ -1,0 +1,23 @@
+[project]
+name = "live-caption-overlay"
+version = "0.1.0"
+description = "Real-time translated captions for a single app's audio (Linux/PipeWire)"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+live-caption = "live_caption.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
