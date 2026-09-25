@@ -1,0 +1,16 @@
+[
+  {"id": 30, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+    "media.class": "Audio/Sink", "node.name": "alsa_output.pci-0000_00_1f.3.analog-stereo", "object.serial": 40}}},
+  {"id": 70, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+    "media.class": "Stream/Output/Audio", "application.name": "Firefox", "application.process.binary": "firefox",
+    "application.process.id": 7111, "media.name": "Netflix - Dark S01E01", "object.serial": 204, "pulse.corked": false}}},
+  {"id": 81, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+    "media.class": "Stream/Output/Audio", "application.name": "Spotify", "application.process.binary": "spotify",
+    "application.process.id": 9001, "media.name": "Spotify", "object.serial": 310}}},
+  {"id": 82, "type": "PipeWire:Interface:Node", "info": {"state": "idle", "props": {
+    "media.class": "Stream/Output/Audio", "application.name": "Firefox", "application.process.binary": "firefox",
+    "application.process.id": 7111, "media.name": "YouTube - lofi", "object.serial": 315, "pulse.corked": true}}},
+  {"id": 90, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+    "media.class": "Stream/Input/Audio", "application.name": "pw-record", "node.name": "live-caption-capture", "object.serial": 400}}},
+  {"id": 5, "type": "PipeWire:Interface:Client", "info": {"props": {"application.name": "gnome-shell"}}}
+]
