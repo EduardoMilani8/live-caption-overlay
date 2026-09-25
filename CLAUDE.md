@@ -82,7 +82,8 @@ Feito na fase 2:
 Pendências conhecidas (para a fase 5, não bloqueiam):
 - Ocasionalmente uma palavra some na fronteira de confirmação (visto uma vez: "can").
 - Whisper às vezes quebra frases com ponto a mais ("Ask not." / "what your country...").
-- Não testado ainda com Netflix real, idioma ≠ inglês e auto-detecção de idioma.
+- Dono testou `transcribe` com Netflix real e funcionou (sem números de latência
+  registrados). Ainda não testados: idioma ≠ inglês e auto-detecção de idioma.
 - Rodar `bench` com o notebook **na tomada** para decidir small vs large-v3-turbo.
 
 Próximo: **Fase 3** — tradução com Argos Translate, só do texto confirmado (ver `docs/PLAN.md`).
