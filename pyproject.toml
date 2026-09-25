@@ -3,10 +3,12 @@ name = "live-caption-overlay"
 version = "0.1.0"
 description = "Real-time translated captions for a single app's audio (Linux/PipeWire)"
 requires-python = ">=3.12"
-dependencies = ["numpy>=2"]
+dependencies = ["numpy>=2", "faster-whisper>=1.2"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# CUDA runtime for CTranslate2 when the system has no cuBLAS/cuDNN
+gpu = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*"]
 
 [project.scripts]
 live-caption = "live_caption.cli:main"
