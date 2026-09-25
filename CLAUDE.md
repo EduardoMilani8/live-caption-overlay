@@ -17,11 +17,13 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 ## Comandos
 
 ```sh
-.venv/bin/pip install -e '.[dev]'          # setup (venv com Python 3.14 do sistema)
+.venv/bin/pip install -e '.[dev,gpu]'      # setup (venv com Python 3.14 do sistema)
 .venv/bin/pytest                           # testes
 .venv/bin/python -m live_caption list      # apps/abas tocando áudio
 .venv/bin/python -m live_caption record [query] [--seconds N] [--out f.wav]
                                            # sem query: menu interativo de abas
+.venv/bin/python -m live_caption transcribe [query] [--file f.wav] [--lang en] [--model small]
+.venv/bin/python -m live_caption bench f.wav   # tempo por passada, por modelo
 ```
 
 ## Arquitetura (até agora)
@@ -31,13 +33,31 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 - `src/live_caption/audio/capture.py` — `StreamCapture` roda `pw-record` apontado
   para o **serial** do stream; PipeWire já entrega 16 kHz mono s16 (formato do
   Whisper). Levanta `StreamGone` quando o app some.
-- `src/live_caption/cli.py` — subcomandos `list` e `record` (argparse).
+- `src/live_caption/audio/sources.py` — `ChunkPump` (thread que drena a captura
+  enquanto o Whisper roda; o pipe de 64 KiB lota em ~2 s) e `file_chunks` (replay
+  de arquivo em tempo real, para testes repetíveis).
+- `src/live_caption/asr/agreement.py` — LocalAgreement-2: palavra só é confirmada
+  quando duas passadas seguidas concordam; dedupe de n-gramas na fronteira.
+- `src/live_caption/asr/streaming.py` — `StreamingTranscriber`: buffer deslizante
+  re-transcrito a cada passo, cortado no fim da última frase confirmada.
+- `src/live_caption/asr/whisper_engine.py` — faster-whisper com portão de VAD,
+  `temperature=0`, idioma travado após detecção confiante.
+- `src/live_caption/asr/gpu.py` — pré-carrega cuBLAS/cuDNN do venv via ctypes.
+- `src/live_caption/pipeline.py` — chunks → updates com medição de atraso.
+- `src/live_caption/cli.py` — subcomandos `list`, `record`, `transcribe`, `bench`.
 
 ## Fatos do ambiente que já custaram descoberta
 
 - Hardware: i7-12650H, RTX 3050 Laptop **4 GiB VRAM**, GNOME **Wayland**, PipeWire 1.6.2.
 - Modelo recomendado: `small` `int8_float16` na GPU; upgrade: `large-v3-turbo`.
-- cuBLAS/cuDNN não estão no sistema → instalar `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` via pip na fase 2.
+- cuBLAS/cuDNN não estão no sistema → vêm do extra `gpu` (pip) e são pré-carregados
+  por `asr/gpu.py` (LD_LIBRARY_PATH só vale se definido antes do processo iniciar).
+- Hugging Face limita a API por IP (429) nesta rede → modelos baixados via `/resolve/`
+  para `~/.cache/live-caption/models/<nome>` (ver README); o engine usa essa pasta se existir.
+- Notebook costuma estar **na bateria e em `power-saver`**: GPU fica com clock baixo.
+  Números de latência dependem disso — anotar a condição ao medir.
+- Whisper recita o `initial_prompt` sobre silêncio; *temperature fallback* causa
+  passadas de 5–10 s. Ambos já tratados no engine — não remover sem medir.
 - Captar o **nó do stream** do app, não o monitor do sink (monitor mistura todos os apps).
 - Alvo por `object.serial`, nunca por `id` (ids são reciclados).
 - `node.dont-reconnect`/`node.dont-fallback` no `pw-record` são essenciais: sem eles,
@@ -50,18 +70,19 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 
 ## Onde paramos (atualizar ao fim de cada sessão)
 
-**2026-09-25 — Fase 1 concluída (falta só confirmar o isolamento).**
+**2026-09-25 — Fases 1 e 2 concluídas.**
 
-Feito:
-- Listagem de streams, captura por stream, `StreamGone`, CLI `list`/`record`.
-- Menu interativo: sem argumento, `record` pergunta qual aba/app legendar.
-- `pick_stream` (atalho `record netflix`): título da aba > nome do app; tocando > pausado.
-- Verificado na máquina: dono capturou a aba do Netflix pelo menu (medidor de dBFS
-  reagindo); app sumindo encerra a captura sem cair no microfone.
+Feito na fase 2:
+- Streaming com faster-whisper `small` na GPU, LocalAgreement-2, buffer deslizante.
+- Verificado ponta a ponta via PipeWire (áudio tocado como aba do Firefox):
+  atraso na tela p50 0,90 s, confirmação p50 1,95 s / p95 2,79 s (na bateria).
+- Corrigidos com base em trace por passada: alucinação do prompt em silêncio,
+  passadas lentas por temperature fallback, relógio de latência.
 
-Pendente:
-- Confirmar isolamento: Netflix + Spotify juntos → `record --out /tmp/n.wav` →
-  `pw-play /tmp/n.wav` só com o Netflix.
+Pendências conhecidas (para a fase 5, não bloqueiam):
+- Ocasionalmente uma palavra some na fronteira de confirmação (visto uma vez: "can").
+- Whisper às vezes quebra frases com ponto a mais ("Ask not." / "what your country...").
+- Não testado ainda com Netflix real, idioma ≠ inglês e auto-detecção de idioma.
+- Rodar `bench` com o notebook **na tomada** para decidir small vs large-v3-turbo.
 
-Próximo: **Fase 2** — transcrição streaming com faster-whisper (ver `docs/PLAN.md`).
-Reconexão quando o título da aba muda (próximo episódio) fica para a fase 5.
+Próximo: **Fase 3** — tradução com Argos Translate, só do texto confirmado (ver `docs/PLAN.md`).

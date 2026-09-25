@@ -43,7 +43,7 @@ transparência. Arrastar funciona com `QWindow.startSystemMove()`.
 
 ---
 
-## Fase 1 — Captura de áudio por aplicativo ✅ (em andamento)
+## Fase 1 — Captura de áudio por aplicativo ✅
 
 - **Ferramentas:** `pw-dump` (listar streams, JSON), `pw-record` (captura), `numpy`.
 - **Como funciona:** o alvo é o nó `Stream/Output/Audio` do app (não o monitor do
@@ -61,7 +61,23 @@ transparência. Arrastar funciona com `QWindow.startSystemMove()`.
   - Captura é **pós-volume do app**: mutar a aba = legenda muda. (Mute no sistema é ok.)
   - Alguns apps destroem/recriam o stream ao pausar → a fase 5 trata reconexão.
 
-## Fase 2 — Transcrição em streaming
+## Fase 2 — Transcrição em streaming ✅
+
+**Medido (2026-09-25, notebook na bateria, `small` int8_float16 na GPU, passo 1 s),
+áudio tocado como aba do Firefox e capturado pelo PipeWire:**
+passada p50 0,72 s / p95 0,95 s · atraso na tela p50 0,90 s · atraso até confirmar
+p50 1,95 s / p95 2,79 s. `bench` na bateria: small ≈ 0,7–1,0 s, large-v3-turbo ≈ 2 s
+por passada (turbo não cabe no orçamento na bateria; medir de novo na tomada).
+
+Aprendizados:
+- O custo da passada quase não depende do tamanho do buffer (o Whisper sempre
+  codifica 30 s); o encoder leva ~0,1 s e o resto é o decoder. O botão de latência é o passo.
+- Em silêncio o Whisper **recita o `initial_prompt`** (palavras todas no mesmo timestamp),
+  mesmo com `vad_filter` → portão de VAD próprio antes de chamar o modelo.
+- *Temperature fallback* gerava passadas de 5–10 s → `temperature=0`.
+- A captura precisa abrir **depois** de carregar o modelo (senão áudio velho acumula
+  no pipe e o relógio de latência fica errado).
+
 
 - **Ferramentas:** `faster-whisper` (CTranslate2), Silero VAD (embutido no
   faster-whisper, via `onnxruntime`), `nvidia-cublas-cu12` + `nvidia-cudnn-cu12` (pip).
