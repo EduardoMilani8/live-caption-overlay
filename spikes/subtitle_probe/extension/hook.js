@@ -98,6 +98,41 @@
     return values;
   }
 
+  // getAdManager() knows the break schedule in content time and whether an ad
+  // is on screen; its getters return objects, so they're summarized here.
+  function adState(player) {
+    const m = player.getAdManager?.();
+    if (!m) return {};
+    const ms = (d) => (d && d.timescale ? Math.round((d.ticks * 1000) / d.timescale) : null);
+    const brk = (b) => b && {
+      i: b.viewableAdBreakIndex, at: b.locationMs, type: b.type, hydrated: b.isHydrated,
+      played: b.hasPlayed, adsMs: ms(b.normalizedAdsDuration),
+      ads: b.ads ? b.ads.map((a) => [a.startTimeMs, a.endTimeMs, a.type]) : null,
+    };
+    // The presenting break isn't shaped like a schedule entry; log its scalar
+    // fields and key names until we know which ones matter.
+    const scalars = (o) => {
+      const out = {};
+      for (let x = o; x && x !== Object.prototype; x = Object.getPrototypeOf(x)) {
+        for (const name of Object.getOwnPropertyNames(x)) {
+          let v;
+          try { v = o[name]; } catch (e) { continue; }
+          if (name in out || typeof v === "function") continue;
+          out[name] = v === null || typeof v !== "object" ? v : Array.isArray(v) ? `[${v.length}]` : "{}";
+        }
+      }
+      return out;
+    };
+    const state = {};
+    const put = (name, f) => { try { state[name] = f(); } catch (e) { state[name] = `ERR ${e.message}`; } };
+    put("ad.presenting", () => m.adPresenting?.value);
+    put("ad.break", () => { const b = m.getPresentingAdBreak(); return JSON.stringify(b ? scalars(b) : null).slice(0, 600); });
+    put("ad.control", () => JSON.stringify(m.getPlayerControlState()));
+    put("ad.canSeek", () => m.canSeek());
+    put("ad.schedule", () => JSON.stringify((m.getAds() || []).map(brk)));
+    return state;
+  }
+
   let describedSession = null;
   setInterval(() => {
     try {
@@ -105,7 +140,7 @@
       const ids = api?.getAllPlayerSessionIds?.() || [];
       const players = ids.map((id) => [id, api.getVideoPlayerBySessionId(id)]).filter(([, p]) => p);
       if (!players.length) return;
-      const event = { [TAG]: true, type: "napi", players: players.map(([id, p]) => ({ id, ...snapshot(p) })) };
+      const event = { [TAG]: true, type: "napi", players: players.map(([id, p]) => ({ id, ...snapshot(p), ...adState(p) })) };
       const key = ids.join(",");
       if (describedSession !== key) {
         describedSession = key;

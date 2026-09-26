@@ -28,6 +28,7 @@ from live_caption.subs.timedtext import Cue, normalize, parse
 
 SETTLE_MS = 2000  # after play/seek the first cue appears mid-way; don't count its lag
 RUN_BREAK_S = 2.0  # video clock vs wall clock mismatch that means a seek/stall
+OFFSET_NOISE_S = 1.0  # Netflix draws ~12% of cue starts 0.4-1 s late (test 1)
 
 
 @dataclass
@@ -199,9 +200,12 @@ class ClockWatch:
         delta = value - prev[1]
         if wall_s <= 0:
             return None
+        # Samples come from a 1 s timer and the player updates its clocks in
+        # steps, so ±50% (at least 1 s) is still "running"; seeks are larger.
+        tolerance = max(0.5 * wall_s, 1.0)
         if delta == 0:
             state = "frozen"
-        elif abs(delta - wall_s) < 0.35 * wall_s + 0.3 or abs(delta - wall_s * 1000) < 0.35 * wall_s * 1000:
+        elif abs(delta - wall_s) < tolerance or abs(delta / 1000 - wall_s) < tolerance:
             state = "running"
         else:
             state = "jump"
@@ -216,6 +220,8 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
     clocks = ClockWatch()
     last_values: dict[str, object] = {}
     last_offset: float | None = None
+    last_ahead: float | None = None
+    last_seg = None
     last_video_count = None
 
     def say(ev: dict, text: str) -> None:
@@ -252,8 +258,20 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
                 adish = [m for m in ev["methods"] if re.search(r"ad(?![a-z])|Ad|break|Break|pod|Pod", m)]
                 say(ev, f"player API: {len(ev['methods'])} methods; ad-related: {', '.join(adish) or 'none'}")
             for player in ev["players"][:1]:
+                # Netflix's getCurrentTime counts ads, getSegmentTime is content
+                # time: their difference is how far the <video> clock is ahead.
+                # Only reported while content plays (segmentTime moving), so an
+                # ad shows up once, as its settled length.
+                cur, seg = player.get("getCurrentTime"), player.get("getSegmentTime")
+                if isinstance(cur, (int, float)) and isinstance(seg, (int, float)):
+                    ahead = (cur - seg) / 1000
+                    moving = seg != last_seg
+                    last_seg = seg
+                    if moving and (last_ahead is None or abs(ahead - last_ahead) > 0.5):
+                        last_ahead = ahead
+                        say(ev, f"api currentTime - segmentTime = {ahead:+.2f} s")
                 for name, value in player.items():
-                    if name == "id":
+                    if name in ("id", "getBufferedTime"):  # buffer level, not a clock
                         continue
                     if isinstance(value, (int, float)) and not isinstance(value, bool):
                         if msg := clocks.update(f"api.{name}", ev["t"], value):
@@ -263,7 +281,7 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
                         say(ev, f"api.{name} = {value}")
         elif kind == "cue" and ev["text"] and ev.get("vt") is not None:
             off = index.offset(ev["text"], ev["vt"])
-            if off is not None and (last_offset is None or abs(off - last_offset) > 0.5):
+            if off is not None and (last_offset is None or abs(off - last_offset) > OFFSET_NOISE_S):
                 last_offset = off
                 say(ev, f"video time - subtitle file time = {off:+.2f} s  ({ev['text'].splitlines()[0]!r})")
 

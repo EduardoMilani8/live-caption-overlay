@@ -59,6 +59,25 @@ class Console:
             return json.loads(self._string(packet["result"]))
         raise TimeoutError(js)
 
+    def eval_async(self, js: str, timeout: float = 30) -> object:
+        """Like eval() for an expression that yields a promise. The RDP console
+        doesn't rewrite top-level await (the DevTools client does), so the
+        settled value is parked on a global and fetched by a second eval."""
+        key = f"__driveResult{time.monotonic_ns()}"
+        self.eval(f"(globalThis.{key} = undefined, Promise.resolve({js}).then("
+                  f"v => globalThis.{key} = {{ok: v === undefined ? null : v}},"
+                  f" e => globalThis.{key} = {{error: String(e)}}), 1)")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            settled = self.eval(f"globalThis.{key}")
+            if isinstance(settled, dict):
+                self.eval(f"delete globalThis.{key}")
+                if "error" in settled:
+                    raise RuntimeError(settled["error"])
+                return settled["ok"]
+            time.sleep(0.2)
+        raise TimeoutError(js)
+
     def _string(self, grip: object) -> str:
         if isinstance(grip, str):
             return grip
