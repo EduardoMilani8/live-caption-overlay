@@ -24,6 +24,16 @@ Peças:
    temporária…** → escolha `spikes/subtitle_probe/extension/manifest.json`.
    (Vale até fechar o Firefox.) Em `about:addons` → Live Caption Probe →
    **Permissões**, confirme que netflix.com, youtube.com e 127.0.0.1 estão ligados.
+
+   Sem cliques: com o Firefox fechado, ponha no `user.js` do perfil
+   `devtools.debugger.remote-enabled`, `devtools.chrome.enabled` = true e
+   `devtools.debugger.prompt-connection` = false (as duas primeiras são exigidas
+   pelo `--start-debugger-server`), e rode
+   ```sh
+   firefox --start-debugger-server 6000 &
+   .venv/bin/python spikes/subtitle_probe/load_extension.py --port 6000
+   ```
+   Depois do teste, volte esses prefs ao padrão (o `prefs.js` guarda o valor).
 3. Abra um episódio na Netflix com legenda **PT-BR ligada**. Se a aba já estava
    aberta antes de carregar a extensão, **recarregue a página (F5)**: o arquivo de
    legenda só é interceptado se a extensão já estiver lá quando o player baixa.
