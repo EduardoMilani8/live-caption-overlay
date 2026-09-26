@@ -148,12 +148,37 @@
     return (s.startsWith("<?xml") || s.startsWith("<tt")) && s.includes("<tt");
   }
 
+  // Which title a file belongs to isn't in the file. Seen on the real player:
+  // a file's xml:lang can be wrong (a pt-BR file said "en"), and ~3 min before
+  // an episode ends the player prefetches the *next* episode's subtitles in the
+  // selected language. So the language comes from the player's selection, and
+  // a second file for the same (movie, language) is taken as that prefetch,
+  // labeled with the next episode from the post-play state. prefetch: true
+  // marks the guess; the app still confirms tracks against on-screen text.
+  const tracksFor = new Set();
+
+  function nextMovieId(current) {
+    try {
+      const id = window.netflix.appContext.state.playerApp.getState()
+        .postPlay.experienceByVideoId[current].items[0].videoId;
+      return Number(id) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function sendTrack(url, body) {
     // Preview autoplay on /browse downloads subtitles too; only the player's count.
     if (!watching() || sent.has(url) || !isTtml(body.slice(0, 4096))) return;
     sent.add(url);
-    const lang = (body.match(/<tt\b[^>]*\bxml:lang="([^"]+)"/) || [])[1] || null;
-    post({ type: "track", kind: "ttml", url, lang, movieId: movieId(player()), size: body.length, body });
+    const p = player();
+    const fileLang = (body.match(/<tt\b[^>]*\bxml:lang="([^"]+)"/) || [])[1] || null;
+    const lang = call(p, "getTimedTextTrack")?.bcp47 || fileLang;
+    const playing = movieId(p);
+    const prefetch = tracksFor.has(`${playing}:${lang}`);
+    const id = prefetch ? nextMovieId(playing) : playing;
+    tracksFor.add(`${id}:${lang}`);
+    post({ type: "track", kind: "ttml", url, lang, fileLang, movieId: id, prefetch, size: body.length, body });
   }
 
   function inspectBuffer(url, buf) {
