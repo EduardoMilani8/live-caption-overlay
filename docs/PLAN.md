@@ -93,7 +93,47 @@ Aprendizados:
   `no_speech_threshold`; auto-detecção de idioma "oscilando" → travar o idioma após
   as primeiras frases; configuração das libs CUDA (`LD_LIBRARY_PATH`).
 
-## Fase 3 — Tradução acoplada
+## Mudança de rumo (2026-09-26) — legenda do player primeiro, áudio como reserva
+
+**Uso real:** série tocando numa aba enquanto o dono trabalha no VS Code; a
+janelinha sempre no topo é o que ele lê para acompanhar, sem olhar o vídeo. O
+atraso de ~2 s do Whisper (p50 da confirmação) atrapalha esse uso, e as séries
+já têm legenda PT-BR na Netflix.
+
+**Nova direção:** onde o serviço tem legenda, pegá-la do player com uma extensão
+do Firefox e mandar para o app local (atraso ~0, texto correto). O Whisper
+(fases 1–2) vira reserva para o que não tem legenda. Tradução com Argos só
+quando a legenda não está no idioma desejado. Música (Spotify): letra
+sincronizada via MPRIS + LRCLIB, em vez de ASR.
+
+```
+extensão Firefox (legenda + tempo do vídeo) ──HTTP local──► app Python ──► overlay PySide6
+PipeWire + Whisper (reserva, sem legenda) ─────────────────►
+```
+
+**Linguagem:** continua Python. O caminho novo é leve (receber texto e desenhar);
+o app pesado (faster-whisper, Argos) é Python; a extensão é JS de qualquer jeito.
+Tauri/Electron não resolvem melhor o "sempre no topo" no Wayland (GTK4 removeu
+`keep_above`; Electron também depende do XWayland).
+
+O plano completo das próximas fases é reescrito depois do spike abaixo, porque o
+resultado dele decide entre ler a legenda da tela ou sincronizar o arquivo inteiro.
+
+## Fase 3 — Spike: legenda direto do player (em andamento)
+
+- **Código:** `spikes/subtitle_probe/` (roteiro de teste no README de lá);
+  parser de TTML/WebVTT/json3 em `src/live_caption/subs/timedtext.py`.
+- **Pergunta:** com a aba da Netflix atrás do VS Code, em outro workspace,
+  minimizada ou em segundo plano, a legenda continua aparecendo na hora? No
+  Wayland o compositor para de pedir quadros a janelas escondidas, e aba em
+  segundo plano tem timers estrangulados; não dá para saber sem medir.
+- **Critério:** `analyze.py` mostra, por cenário, atraso na tela vs. horário do
+  arquivo de legenda e legendas perdidas.
+- **Decisão que sai daqui:** se a legenda na tela chega em dia em todos os
+  cenários → ler da tela (simples). Se não → interceptar o arquivo e sincronizar
+  pelo `currentTime` do vídeo (robusto, permite pré-traduzir).
+
+## Tradução acoplada (era a fase 3; agora só para legenda em outro idioma)
 
 - **Ferramentas:** `argostranslate` (roda em CPU, preserva VRAM para o Whisper).
 - **Estratégia:** traduzir **só texto confirmado**, por frase — traduzir hipóteses

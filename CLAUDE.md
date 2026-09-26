@@ -24,6 +24,8 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
                                            # sem query: menu interativo de abas
 .venv/bin/python -m live_caption transcribe [query] [--file f.wav] [--lang en] [--model small]
 .venv/bin/python -m live_caption bench f.wav   # tempo por passada, por modelo
+.venv/bin/python spikes/subtitle_probe/server.py --out probe.jsonl   # spike fase 3
+.venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl
 ```
 
 ## Arquitetura (até agora)
@@ -45,6 +47,11 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 - `src/live_caption/asr/gpu.py` — pré-carrega cuBLAS/cuDNN do venv via ctypes.
 - `src/live_caption/pipeline.py` — chunks → updates com medição de atraso.
 - `src/live_caption/cli.py` — subcomandos `list`, `record`, `transcribe`, `bench`.
+- `src/live_caption/subs/timedtext.py` — parser de TTML (Netflix, tempos em ticks),
+  WebVTT e json3 (YouTube) → lista de `Cue(start, end, text)`; `normalize` para casar
+  texto da tela com o arquivo.
+- `spikes/subtitle_probe/` — extensão Firefox (MV3) + receptor HTTP local + analisador
+  para medir se a legenda do player chega em dia com a aba escondida.
 
 ## Fatos do ambiente que já custaram descoberta
 
@@ -70,6 +77,23 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 
 ## Onde paramos (atualizar ao fim de cada sessão)
 
+**2026-09-26 — Mudança de rumo: legenda do player primeiro, Whisper como reserva.**
+
+Motivo: o dono ouve a série numa aba enquanto trabalha no VS Code e lê só a
+janelinha always-on-top; ~2 s de atraso do Whisper incomoda, e as séries já têm
+legenda PT-BR na Netflix. Ver "Mudança de rumo" em `docs/PLAN.md`. Continua Python.
+
+Feito: spike `spikes/subtitle_probe/` (extensão + receptor + analisador) e parser
+`subs/timedtext.py` com testes. Testado só com log sintético e `web-ext lint`
+(o container não tem Firefox) — **falta rodar na máquina real** seguindo o README
+do spike e trazer a saída do `analyze.py`.
+
+Próximo: com o resultado, escolher "ler da tela" vs. "sincronizar arquivo pelo
+`currentTime`" e reescrever as fases seguintes do `docs/PLAN.md`
+(extensão definitiva → app receptor → overlay PySide6).
+
+---
+
 **2026-09-25 — Fases 1 e 2 concluídas.**
 
 Feito na fase 2:
@@ -86,4 +110,4 @@ Pendências conhecidas (para a fase 5, não bloqueiam):
   registrados). Ainda não testados: idioma ≠ inglês e auto-detecção de idioma.
 - Rodar `bench` com o notebook **na tomada** para decidir small vs large-v3-turbo.
 
-Próximo: **Fase 3** — tradução com Argos Translate, só do texto confirmado (ver `docs/PLAN.md`).
+(Superado em 2026-09-26: a tradução com Argos virou recurso secundário — ver entrada acima.)
