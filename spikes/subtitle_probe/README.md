@@ -143,4 +143,95 @@ Sem mexer no vídeo fora dessas ações. Depois:
   vai precisar descontar); se continuar `+0.0x s`, não conta;
 - `2 <video> element(s)` / `video #1 loadedmetadata` = anúncio em elemento separado;
 - `api.<algo> frozen` durante o anúncio = a API tem o relógio do conteúdo;
-- `player API: ... ad-related: ...` = métodos com nome de anúncio para investigar.
+- `player API: ... ad-related: ...` = métodos com nome de anúncio para investigar;
+- `api currentTime - segmentTime = +NN s` = quanto o `<video>` está adiantado em
+  relação ao conteúdo (a soma dos anúncios já tocados).
+
+Sem ninguém no teclado: `drive.py` faz o papel do dono pelo mesmo RDP do
+`load_extension.py` — abre a aba, avalia JS na página (onde fica a API do
+player) e manda os marcadores por POST para o `server.py`.
+
+## Resultado do teste 2 (2026-09-26, Netflix com anúncios, House T5, PT-BR, Firefox 156 snap)
+
+Rodado sem ninguém mexendo (`drive.py`), aba visível, janela sem foco.
+
+| Cenário | O que aconteceu |
+|---|---|
+| mid-roll com seek 20 s antes (E1, intervalo 26:57) | intervalo hidratado no seek, **vazio**; conteúdo seguiu direto |
+| mid-roll sem seek (E1, intervalo 33:39, ~6 min de reprodução normal) | **1 anúncio de 32 s** |
+| pre-roll (E2 aberto do começo, nunca assistido) | intervalo em 0 ms vazio, sem anúncio (4 min depois do anterior) |
+| mid-roll com seek 90 s antes (E2, 17:07) | hidratado ~59 s antes, **vazio** |
+| pausa no anúncio (E2, 26:03 e 34:02, ~20 min sem seek) | os dois intervalos hidratados ~59 s antes, **vazios** — não houve anúncio para pausar (não medido) |
+
+Um único anúncio servido em ~35 min de reprodução, com 6 intervalos passados
+(contando o pre-roll).
+No resumo por cenário (`analyze.py` sem `--timeline`), o efeito aparece do
+outro lado: em "mid-roll 2" 37 das 98 falas na tela não casam com o arquivo no
+tempo do `<video>` — são todas as de depois do anúncio, 32 s deslocadas.
+
+O que o anúncio de 32 s mostrou (`analyze.py --timeline`, trecho):
+
+```
+13:20:46  ui + ads-info-container  'Anúncio31'
+13:20:46  ui + video-title  'Dr. House volta após os anúncios'
+13:20:46  api.ad.presenting = True
+13:20:46  api.ad.canSeek = False
+13:20:47  api.getSegmentTime frozen (2019267.00 -> 2019267.00 in 1.0 s)
+13:21:18  api currentTime - segmentTime = +32.03 s
+13:21:18  api.getSegmentTime running (2019267.00 -> 2019643.00 in 1.0 s)
+13:21:18  api.ad.presenting = False
+13:21:18  ui - ads-info-container
+13:21:28  video time - subtitle file time = +32.03 s  ('Não espere que as coisas')
+```
+
+- **O `<video>` conta o anúncio.** O anúncio é emendado na mesma timeline MSE do
+  mesmo `<video>` (continua 1 elemento, mesma fonte `blob:`), `currentTime`
+  segue correndo e depois dele a legenda do arquivo ficaria **32,03 s
+  adiantada** — exatamente a duração do anúncio. `getDuration()` não muda.
+- **Nenhum evento de mídia nas bordas** (`play`/`pause`/`seeked`/`emptied`/
+  `durationchange` — nada). Âncoras disparadas só por evento de mídia não veem o
+  intervalo.
+- **A API do player tem o relógio do conteúdo:** `getSegmentTime()` congela
+  exatamente no `locationMs` do intervalo durante o anúncio e retoma em tempo de
+  conteúdo; `getCurrentTime()` é o relógio do `<video>` (conta anúncio). A
+  diferença entre os dois é o desconto, e volta a 0 quando a página recarrega
+  (a nova timeline começa já na posição do conteúdo).
+- **Sinal de anúncio na tela:** `getAdManager().adPresenting.value` (um
+  observável — tem `addListener`) vira `true`/`false` no mesmo segundo que a
+  interface mostra/tira `data-uia="ads-info-container"` ("Anúncio" + contagem
+  regressiva em `ads-info-time`). `canSeek()` fica `false` durante o anúncio.
+  A Netflix não desenha legenda nenhuma durante o anúncio.
+- **A grade de intervalos vem de antemão:** `getAdManager().getAds()` lista os
+  intervalos do episódio em tempo de conteúdo (`locationMs`, também em ticks de
+  1/24000 s) desde o início; cada um é *hidratado* (recebe os anúncios) ~60 s
+  antes, ou na hora de um seek, e pode vir vazio. A barra de progresso tem
+  `data-uia="ad-markers"`.
+- **Quando a Netflix não serve anúncio:** 5 dos 6 intervalos vieram vazios —
+  depois de seek, com anúncio recente, e também dois com ~20 min de reprodução
+  contínua; o único servido foi depois de ~6 min de reprodução contínua. Não dá para separar "regra de seek" de "limite de
+  frequência" com uma conta só — e para o app tanto faz: intervalo vazio não
+  mexe em nenhum relógio (`currentTime - segmentTime` fica 0).
+- Autoplay: navegar pelo RDP não conta como gesto do usuário e o Firefox mostra
+  `player-blocked-play`; o `drive.py` não contorna isso sozinho — neste teste foi
+  dada a permissão `autoplay-media` só para a sessão (`EXPIRE_SESSION`).
+
+### Como o app deve detectar e descontar os anúncios
+
+1. **Relógio do conteúdo na extensão, não no app.** Cada âncora leva
+   `vt = video.currentTime − (getCurrentTime() − getSegmentTime()) / 1000`: usa a
+   precisão do `<video>` e desconta os anúncios já tocados. O desconto é
+   recalculado em **toda** âncora (nunca guardado): ele zera ao recarregar a
+   página, ao trocar de episódio e, se a Netflix mudar isso, num seek.
+2. **Intervalo = `adPresenting.value`**, assinado com `addListener` (evento, não
+   timer — sem estrangulamento em aba escondida) e conferido em cada âncora.
+   Enquanto for `true`, a âncora vai com `ad: true` e o `vt` congelado no
+   `getSegmentTime()`; o app esconde a legenda e para o relógio. No fim do
+   anúncio, uma âncora normal (já com o desconto novo) retoma tudo.
+3. **Reserva, se a API mudar:** `data-uia="ads-info-container"` presente na
+   página (MutationObserver) = anúncio na tela; o desconto então vem da rede de
+   segurança do plano — o texto da tela casado com o arquivo mede o deslocamento
+   (aqui deu +32,03 s, exato).
+4. Não usar a grade `getAds()` para *prever* anúncio: intervalo vazio é comum.
+
+Fica para o critério da fase 4 (não houve anúncio para medir): pausar no meio do
+anúncio — o esperado é `adPresenting` continuar `true` e `segmentTime` parado.

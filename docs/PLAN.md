@@ -160,23 +160,29 @@ Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► a
   idiomas; a ativa é a do título em `/watch/<id>` que casa com o texto da tela.
 - **Anúncios (o dono usa o plano com anúncios):** o overlay **não legenda
   anúncios**, e depois de um intervalo a legenda tem de continuar no tempo certo.
-  Primeiro medir (teste 2 do spike, `analyze.py --timeline`) o que a Netflix faz
-  num intervalo: se o `currentTime` do `<video>` conta o anúncio, se o anúncio
-  toca em outro `<video>`, como a interface marca o anúncio (`data-uia`), e se a
-  API interna do player tem o relógio do conteúdo. Com isso a extensão passa a
-  mandar âncoras `{…, ad: true}` durante o intervalo e âncoras em tempo de
-  **conteúdo** fora dele. Rede de segurança independente da Netflix: cada fala
-  que aparece na tela casa com o arquivo e revela o deslocamento real (o *fim*
+  Medido no teste 2 do spike: o anúncio é emendado no mesmo `<video>`, cujo
+  `currentTime` **conta o anúncio** (legenda ficaria +32 s adiantada depois de um
+  anúncio de 32 s), sem nenhum evento de mídia nas bordas. A API do player tem o
+  relógio do conteúdo (`getSegmentTime()`; `getCurrentTime()` conta anúncio) e o
+  sinal de anúncio (`getAdManager().adPresenting`, observável). Então a extensão
+  manda `vt = video.currentTime − (getCurrentTime() − getSegmentTime())/1000`,
+  recalculado em toda âncora, e âncoras `{…, ad: true}` enquanto `adPresenting`
+  for `true` (assinado com `addListener`, não por timer). Reserva se a API
+  mudar: `data-uia="ads-info-container"` na página. Rede de segurança
+  independente da Netflix: cada fala que aparece na tela casa com o arquivo e
+  revela o deslocamento real (o *fim*
   das falas na tela é preciso, < 100 ms no spike), então o app corrige sozinho
   se o relógio escorregar.
 - **Critério:** com o receptor do spike, um episódio mostra 1 trilha do título
   certo, âncoras em cada play/pause/seek, e uma trilha nova ao passar para o
   próximo episódio ou trocar o idioma da legenda. Num intervalo comercial, as
   âncoras marcam `ad` do começo ao fim e, depois dele, o deslocamento vídeo ×
-  arquivo volta a ~0.
+  arquivo volta a ~0. (Para ver um anúncio, deixar tocar sem seek: nos testes a
+  Netflix só serviu anúncio depois de minutos de reprodução contínua.)
 - **Riscos:** legenda desligada no player → a Netflix não baixa arquivo (manter
   ligada; esconder a da tela fica para depois); a Netflix mudar o formato;
-  anúncio sem nenhum sinal na página (aí só a rede de segurança pela tela).
+  a API interna (`getSegmentTime`, `getAdManager`) mudar de nome — não é pública
+  (aí a reserva `data-uia` + a rede de segurança pela tela).
 
 ## Fase 5 — App receptor + relógio (saída no terminal)
 

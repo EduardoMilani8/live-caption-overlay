@@ -28,6 +28,8 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
 .venv/bin/python spikes/subtitle_probe/server.py --out probe.jsonl   # spike fase 3
 .venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl
 .venv/bin/python spikes/subtitle_probe/load_extension.py   # extensão temporária via RDP
+.venv/bin/python spikes/subtitle_probe/drive.py eval netflix.com/watch 'JS'  # JS na aba
+                                           # (também: open URL, mark 'nota')
 ```
 
 ## Arquitetura (até agora)
@@ -86,8 +88,36 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
   das prévias em autoplay na `/browse`. Seletores `.player-timedtext*` confirmados.
 - O renderizador de legenda da Netflix desenha ~12% dos inícios de fala 0,4–1 s
   atrasados (e às vezes pula uma fala curta), com a aba visível ou não.
+- Anúncio da Netflix é emendado no **mesmo `<video>`**: `currentTime` conta o anúncio,
+  sem evento de mídia nas bordas. Relógio do conteúdo = `getSegmentTime()` da API
+  interna do player; anúncio na tela = `getAdManager().adPresenting.value`.
+  A Netflix serve anúncio raramente (1 em 6 intervalos no teste) — para testar,
+  deixar tocar sem seek.
+- Navegar pelo RDP não conta como gesto do usuário: autoplay bloqueado
+  (`player-blocked-play`). Para testes, permissão `autoplay-media` com
+  `EXPIRE_SESSION` pelo console do processo pai. Reiniciar o Firefox por
+  `Services.startup.quit(eRestart | eAttemptQuit)` salva e restaura a sessão;
+  SIGTERM não grava o `sessionstore.jsonlz4`.
+- O perfil tem **Adblock Plus** ativo; não impediu o anúncio da Netflix.
 
 ## Onde paramos (atualizar ao fim de cada sessão)
+
+**2026-09-26 (tarde) — Teste 2 do spike (anúncios) rodado; como descontar, decidido.**
+
+Rodado sozinho via `drive.py` (RDP) no perfil do dono, House T5E1–E2: 1 anúncio
+de 32 s em 6 intervalos. O `<video>` conta o anúncio (legenda ficaria +32 s
+adiantada); `getSegmentTime()` congela no intervalo e é o relógio do conteúdo.
+Receita no README do spike ("Como o app deve detectar e descontar") e na fase 4
+do `docs/PLAN.md`: `vt = video.currentTime − (getCurrentTime() − getSegmentTime())/1000`
+em toda âncora, `ad: true` enquanto `adPresenting`; reserva `data-uia="ads-info-container"`.
+Não medido (não houve anúncio): pausa no meio do anúncio — fica no critério da fase 4.
+
+Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`).
+
+Pendência de limpeza: o `user.js` do perfil do Firefox (que volta os prefs de
+depuração ao padrão) já foi aplicado no reinício de 13:46; pode ser apagado.
+
+---
 
 **2026-09-26 — Fase 3 (spike) concluída; decidido: arquivo sincronizado.**
 
@@ -105,15 +135,8 @@ trilha + âncoras de tempo, relógio fica no app Python. Fases reescritas em
 `docs/PLAN.md` (4 extensão definitiva → 5 receptor + relógio → 6 overlay →
 7 tradução → 8 reservas Whisper/música).
 
-Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`), começando pelos
-**anúncios**: o dono usa o plano da Netflix com anúncios e não quer anúncio legendado.
-Probe estendido (vídeos, marcadores `data-uia`, API interna do player) e
-`analyze.py --timeline`, testados só com log sintético — **falta rodar o teste 2**
-do README do spike na máquina real e decidir como detectar o intervalo e
-descontar o anúncio do relógio.
-
-Pendência de limpeza: o perfil do Firefox tem um `user.js` que volta os prefs de
-depuração ao padrão no próximo início; depois disso pode ser apagado.
+Anúncios: o dono usa o plano da Netflix com anúncios e não quer anúncio legendado
+(resolvido no teste 2, entrada acima).
 
 ---
 
