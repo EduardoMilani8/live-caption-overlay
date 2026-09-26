@@ -104,8 +104,29 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
   `Services.startup.quit(eRestart | eAttemptQuit)` salva e restaura a sessão;
   SIGTERM não grava o `sessionstore.jsonlz4`.
 - O perfil tem **Adblock Plus** ativo; não impediu o anúncio da Netflix.
+- O `xml:lang` do TTML da Netflix pode estar errado (arquivo pt-BR dizendo `en`): idioma
+  vem de `getTimedTextTrack().bcp47`. A trilha do **próximo** episódio chega ~3 min antes
+  do fim; o id dele está em `getState().postPlay.experienceByVideoId[<atual>].items[0].videoId`.
+- Os `loadedmetadata`/`play` iniciais da Netflix acontecem com o `<video>` fora do
+  documento (listener no `document` não vê); a primeira âncora é um `timeupdate`.
 
 ## Onde paramos (atualizar ao fim de cada sessão)
+
+**2026-09-26 (noite) — Fase 4 concluída: extensão definitiva verificada na Netflix.**
+
+`extension/` (protocolo das mensagens e resultados em `extension/README.md`). Verificado
+com o receptor do spike + `drive.py`: 1 trilha por episódio, âncoras em
+play/pause/seek/1,5×, trilha nova na troca de idioma e no *autoplay* do próximo episódio
+(rotulada `prefetch`), e um **pre-roll de ~15 s**: `vt` parado com `ad` durante, falas da
+tela casando com o arquivo (mediana 17 ms) depois. Corrigido na verificação: idioma e
+episódio da trilha. Não medido: pausar durante um anúncio (nenhum mid-roll servido).
+
+Próximo: **Fase 5** — receptor + `SubtitleClock` + `follow` (ver `docs/PLAN.md`).
+
+Pendência de limpeza: o `user.js` do perfil do Firefox (reset dos prefs de depuração) já
+foi aplicado de novo; pode ser apagado.
+
+---
 
 **2026-09-26 (tarde) — Teste 2 do spike (anúncios) rodado; como descontar, decidido.**
 
@@ -117,10 +138,6 @@ do `docs/PLAN.md`: `vt = video.currentTime − (getCurrentTime() − getSegmentT
 em toda âncora, `ad: true` enquanto `adPresenting`; reserva `data-uia="ads-info-container"`.
 Não medido (não houve anúncio): pausa no meio do anúncio — fica no critério da fase 4.
 
-Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`).
-
-Pendência de limpeza: o `user.js` do perfil do Firefox (que volta os prefs de
-depuração ao padrão) já foi aplicado no reinício de 13:46; pode ser apagado.
 
 ---
 

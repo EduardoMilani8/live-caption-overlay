@@ -147,7 +147,13 @@ Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► a
   fala e pulou uma fala curta, mesmo visível. O arquivo inteiro do episódio é
   interceptado ao abrir o player. Detalhes em `spikes/subtitle_probe/README.md`.
 
-## Fase 4 — Extensão definitiva: arquivo + âncoras de tempo
+## Fase 4 — Extensão definitiva: arquivo + âncoras de tempo ✅
+
+Verificada em 2026-09-26 na Netflix real (resultados e protocolo das mensagens em
+`extension/README.md`). Diferenças do plano abaixo: o texto da tela também sai do
+`page.js` (precisa do mesmo relógio de conteúdo); o idioma da trilha vem do player,
+não do `xml:lang` do arquivo (que pode estar errado); a trilha do próximo episódio
+chega ~3 min antes do fim e é rotulada pelo *post-play* (`prefetch: true`).
 
 - **Onde:** `extension/` na raiz (a do spike fica como referência).
 - **O que faz:** reaproveita o `hook.js` do spike para interceptar o TTML; manda
@@ -170,9 +176,8 @@ Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► a
   for `true` (assinado com `addListener`, não por timer). Reserva se a API
   mudar: `data-uia="ads-info-container"` na página. Rede de segurança
   independente da Netflix: cada fala que aparece na tela casa com o arquivo e
-  revela o deslocamento real (o *fim*
-  das falas na tela é preciso, < 100 ms no spike), então o app corrige sozinho
-  se o relógio escorregar.
+  revela o deslocamento real (o *fim* das falas na tela é preciso, < 100 ms no
+  spike), então o app corrige sozinho se o relógio escorregar.
 - **Critério:** com o receptor do spike, um episódio mostra 1 trilha do título
   certo, âncoras em cada play/pause/seek, e uma trilha nova ao passar para o
   próximo episódio ou trocar o idioma da legenda. Num intervalo comercial, as
@@ -193,6 +198,10 @@ Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► a
   deriva); acha a fala atual por busca binária e agenda a próxima troca no app
   Python. A lógica do relógio é pura e testada com pytest (pausa, seek, 1,5×,
   âncora atrasada, falas sobrepostas).
+- **Trilha ativa:** a das âncoras (`movieId`) no idioma mais recente; confirmar
+  (e trocar, se preciso) pelo texto da tela (`cue`): trocar de idioma de volta
+  para um já baixado não manda trilha nova, e `prefetch` é palpite.
+- **Anúncio:** com `ad: true`, esconder a legenda; `paused` já para o relógio.
 - **Critério:** `follow` imprime cada fala no terminal no instante certo; comparado
   com o texto da tela que a extensão ainda manda, o início das falas erra
   p95 < 100 ms, sem falas perdidas, com a aba escondida.
