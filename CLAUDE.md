@@ -1,7 +1,8 @@
 # CLAUDE.md
 
-Legendas traduzidas em tempo real do áudio de **um** app/aba, exibidas num overlay
-flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.md`.
+Legendas em tempo real de **um** app/aba (a legenda do próprio player, ou Whisper
+quando não há legenda), exibidas num overlay flutuante. Projeto pessoal, só
+Linux + PipeWire. Plano completo em `docs/PLAN.md`.
 
 ## Como trabalhamos neste projeto
 
@@ -87,24 +88,26 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 
 ## Onde paramos (atualizar ao fim de cada sessão)
 
-**2026-09-26 — Mudança de rumo: legenda do player primeiro, Whisper como reserva.**
+**2026-09-26 — Fase 3 (spike) concluída; decidido: arquivo sincronizado.**
 
-Motivo: o dono ouve a série numa aba enquanto trabalha no VS Code e lê só a
-janelinha always-on-top; ~2 s de atraso do Whisper incomoda, e as séries já têm
-legenda PT-BR na Netflix. Ver "Mudança de rumo" em `docs/PLAN.md`. Continua Python.
+Motivo da mudança de rumo: o dono ouve a série numa aba enquanto trabalha no
+VS Code e lê só a janelinha always-on-top; ~2 s de atraso do Whisper incomoda, e
+as séries já têm legenda PT-BR na Netflix. Continua Python.
 
-Feito: spike `spikes/subtitle_probe/` (extensão + receptor + analisador) e parser
-`subs/timedtext.py` com testes. **Rodado na máquina real** (Netflix, ~11 min, 6
-cenários; tabela em `spikes/subtitle_probe/README.md`): visibilidade não muda nada
-(escondida/minimizada/outra aba = visível), extensão funcionou sem ajuste. O que
-limita "ler da tela" é o próprio renderizador da Netflix (inícios de fala até ~1 s
-atrasados em ~12% dos casos, 1 fala pulada), não a aba escondida.
+Feito: spike `spikes/subtitle_probe/` rodado na máquina real (Netflix, ~11 min,
+6 cenários; tabela no README do spike). Aba escondida não atrasa nada; o que
+atrapalha "ler da tela" é o renderizador da Netflix (~12% dos inícios de fala
+0,4–1 s atrasados, 1 fala pulada). O TTML do episódio inteiro é interceptado.
 
-Próximo: dono decidir entre "ler da tela" e "sincronizar o arquivo pelo
-`currentTime`" (recomendação do Claude: arquivo, com o relógio no app Python e a
-extensão só mandando âncoras `currentTime`/play/pause/seek; tela como verificação)
-e então reescrever as fases seguintes do `docs/PLAN.md`
-(extensão definitiva → app receptor → overlay PySide6).
+Decisão do dono: **sincronizar o arquivo pelo relógio do vídeo** — extensão manda
+trilha + âncoras de tempo, relógio fica no app Python. Fases reescritas em
+`docs/PLAN.md` (4 extensão definitiva → 5 receptor + relógio → 6 overlay →
+7 tradução → 8 reservas Whisper/música).
+
+Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`).
+
+Pendência de limpeza: o perfil do Firefox tem um `user.js` que volta os prefs de
+depuração ao padrão no próximo início; depois disso pode ser apagado.
 
 ---
 

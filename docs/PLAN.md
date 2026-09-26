@@ -116,10 +116,20 @@ o app pesado (faster-whisper, Argos) é Python; a extensão é JS de qualquer je
 Tauri/Electron não resolvem melhor o "sempre no topo" no Wayland (GTK4 removeu
 `keep_above`; Electron também depende do XWayland).
 
-O plano completo das próximas fases é reescrito depois do spike abaixo, porque o
-resultado dele decide entre ler a legenda da tela ou sincronizar o arquivo inteiro.
+**Decisão (2026-09-26, após o spike da fase 3): sincronizar o arquivo de legenda
+pelo relógio do vídeo**, não ler da tela. A extensão intercepta o arquivo do
+episódio inteiro e manda "âncoras" de tempo (`currentTime`, velocidade, pausado)
+nos eventos do player; o app Python mantém o relógio e decide qual fala mostrar.
+Assim o tempo sai exato (a tela da Netflix atrasa ~12% das falas), nenhuma fala
+se perde, a aba escondida não importa (o app não depende de timers do navegador)
+e o episódio pode ser traduzido inteiro de antemão.
 
-## Fase 3 — Spike: legenda direto do player (medido em 2026-09-26)
+```
+Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► app Python:
+           parser → relógio → fala atual ─► overlay PySide6
+```
+
+## Fase 3 — Spike: legenda direto do player ✅
 
 - **Código:** `spikes/subtitle_probe/` (roteiro de teste no README de lá);
   parser de TTML/WebVTT/json3 em `src/live_caption/subs/timedtext.py`.
@@ -137,34 +147,65 @@ resultado dele decide entre ler a legenda da tela ou sincronizar o arquivo intei
   fala e pulou uma fala curta, mesmo visível. O arquivo inteiro do episódio é
   interceptado ao abrir o player. Detalhes em `spikes/subtitle_probe/README.md`.
 
-## Tradução acoplada (era a fase 3; agora só para legenda em outro idioma)
+## Fase 4 — Extensão definitiva: arquivo + âncoras de tempo
 
-- **Ferramentas:** `argostranslate` (roda em CPU, preserva VRAM para o Whisper).
-- **Estratégia:** traduzir **só texto confirmado**, por frase — traduzir hipóteses
-  provisórias faz a legenda "piscar" com traduções diferentes a cada passada.
-  Instância do tradutor carregada uma vez e reutilizada.
-- **Critério:** `python -m live_caption translate netflix --to pt` imprime pares
-  original→tradução com tempo por frase (< ~300 ms em CPU).
-- **Riscos:** par de idiomas inexistente → Argos faz pivô via inglês (perde
-  qualidade); dependências pesadas de segmentação de frase (verificar o que a versão
-  atual puxa); qualidade ruim em fragmentos curtos.
+- **Onde:** `extension/` na raiz (a do spike fica como referência).
+- **O que faz:** reaproveita o `hook.js` do spike para interceptar o TTML; manda
+  cada trilha **uma vez** com o id do título (`/watch/<id>`) e o idioma
+  (`xml:lang`); manda âncoras `{t (relógio de parede), vt, rate, paused}` em
+  `play`/`pause`/`seeked`/`ratechange`, na troca de episódio e a cada ~1 s via
+  `timeupdate` (evento de mídia, não timer — não sofre estrangulamento). Continua
+  mandando o texto da tela, só como verificação.
+- **Trilha ativa:** a Netflix também baixa legendas das prévias e de outros
+  idiomas; a ativa é a do título em `/watch/<id>` que casa com o texto da tela.
+- **Critério:** com o receptor do spike, um episódio mostra 1 trilha do título
+  certo, âncoras em cada play/pause/seek, e uma trilha nova ao passar para o
+  próximo episódio ou trocar o idioma da legenda.
+- **Riscos:** legenda desligada no player → a Netflix não baixa arquivo (manter
+  ligada; esconder a da tela fica para depois); a Netflix mudar o formato.
 
-## Fase 4 — Overlay
+## Fase 5 — App receptor + relógio (saída no terminal)
+
+- **Onde:** `src/live_caption/subs/` (receptor HTTP, `SubtitleClock`), comando
+  `python -m live_caption follow`.
+- **Como:** o relógio extrapola `vt_agora = vt + (agora − t) × rate` a partir da
+  última âncora (mesma máquina → mesmo relógio de parede, sem ajuste de fuso ou
+  deriva); acha a fala atual por busca binária e agenda a próxima troca no app
+  Python. A lógica do relógio é pura e testada com pytest (pausa, seek, 1,5×,
+  âncora atrasada, falas sobrepostas).
+- **Critério:** `follow` imprime cada fala no terminal no instante certo; comparado
+  com o texto da tela que a extensão ainda manda, o início das falas erra
+  p95 < 100 ms, sem falas perdidas, com a aba escondida.
+
+## Fase 6 — Overlay
 
 - **Ferramentas:** `PySide6` (QWidget sem moldura, `WA_TranslucentBackground`,
   `WindowStaysOnTopHint`, `startSystemMove`), rodando via XWayland.
-- **Critério:** primeiro com fonte de texto *fake* (timer), depois com o pipeline
-  real: janela transparente, sempre no topo, arrastável, com 1–2 linhas de legenda
-  sobre o Firefox tocando Netflix.
+- **Critério:** primeiro com fonte de texto *fake* (timer), depois ligado ao
+  relógio da fase 5: janela transparente, sempre no topo, arrastável, 1–2 linhas
+  de legenda legíveis por cima do VS Code enquanto a Netflix toca escondida.
 - **Riscos:** Wayland (ver acima); sobreposição a vídeo em **tela cheia** pode não
   funcionar no Mutter → usar o navegador maximizado; click-through (clicar "através"
   da legenda) fica fora da v1.
 
-## Fase 5 — Latência e qualidade
+## Fase 7 — Tradução quando a legenda não está em PT-BR
 
-- **Ferramentas:** instrumentação própria (timestamps por estágio), config em TOML.
-- **O que fazer:** medir atraso ponta a ponta (captura → ASR → tradução → tela);
-  variar passo, tamanho máximo do buffer, limiares de VAD, `small` vs `large-v3-turbo`;
-  reconectar automaticamente quando o stream some (`StreamGone`) procurando o mesmo app.
-- **Critério:** p50 de atraso ≤ ~2,5 s medido, e legenda fluida em 10 min de episódio.
-  Cortes/repetições ocasionais são **esperados** — ajuste iterativo, não bug.
+- **Ferramentas:** `argostranslate` (CPU).
+- **Estratégia:** com o arquivo inteiro na mão, traduzir **o episódio todo ao
+  receber a trilha** (em background, na ordem do tempo, a partir da posição atual),
+  guardando em cache por título. Na hora de mostrar é só consulta — atraso zero.
+- **Critério:** episódio só com legenda em inglês aparece em PT-BR no overlay;
+  tempo para traduzir um episódio inteiro medido.
+- **Riscos:** par sem modelo direto → pivô via inglês (perde qualidade); frases
+  quebradas em duas falas traduzidas separadamente (juntar por pontuação).
+
+## Fase 8 — Reservas: sem legenda (Whisper) e música (letras)
+
+- **Whisper (fases 1–2 já prontas):** para o que não tem legenda; entra no mesmo
+  overlay. Pendências herdadas: reconectar quando o stream some (`StreamGone`),
+  `small` vs `large-v3-turbo` medido na tomada, palavra perdida na fronteira de
+  confirmação. Cortes/repetições ocasionais são **esperados** — ajuste iterativo.
+- **Música (Spotify):** título e posição via MPRIS + letra sincronizada do LRCLIB,
+  reaproveitando o relógio da fase 5.
+- **Critério:** vídeo sem legenda mostra transcrição com atraso p50 ≤ ~2,5 s;
+  música com letra mostra a linha certa.
