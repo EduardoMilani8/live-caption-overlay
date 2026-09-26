@@ -64,7 +64,8 @@ class Log:
             if not ev.get("capEl") and not ev.get("paused"):
                 print(f"{GRAY}{clock} no subtitle element on page (subtitles off?){RESET}")
         elif kind == "track":
-            about = f" lang={ev['lang']} movie={ev['movieId']}" if "lang" in ev else ""
+            about = (f" lang={ev['lang']} (file: {ev.get('fileLang')}) movie={ev['movieId']}"
+                     f"{' PREFETCH' if ev.get('prefetch') else ''}") if "lang" in ev else ""
             print(f"{GREEN}{clock} captured {ev['kind']} track, {ev['size']} chars{about}{RESET}")
         elif kind == "anchor":  # from the app's extension (extension/ at the repo root)
             state = (ev.get("ad"), ev.get("clock"), ev.get("movieId"))

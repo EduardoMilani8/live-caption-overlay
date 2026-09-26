@@ -234,7 +234,8 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
         if kind == "mark":
             say(ev, f"==== {ev['note']} ====")
         elif kind == "track":
-            about = f", lang={ev['lang']}, movie={ev['movieId']}" if "lang" in ev else ""
+            about = (f", lang={ev['lang']} (file: {ev.get('fileLang')}), movie={ev['movieId']}"
+                     f"{', prefetch' if ev.get('prefetch') else ''}") if "lang" in ev else ""
             say(ev, f"subtitle track: {ev['kind']}, {ev['size']} chars{about}")
         elif kind == "anchor":  # from the app's extension; timeupdates only when state changes
             state = (ev["ad"], ev["paused"], ev["clock"], ev["movieId"])
