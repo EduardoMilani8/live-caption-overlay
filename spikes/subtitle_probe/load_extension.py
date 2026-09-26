@@ -71,12 +71,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--port", type=int, default=6000)
     parser.add_argument("--timeout", type=float, default=60, help="seconds to wait for Firefox")
+    parser.add_argument("--dir", type=Path, default=EXTENSION_DIR,
+                        help="extension to load (default: this spike's probe; the app's is extension/)")
     args = parser.parse_args()
 
     rdp = Rdp(args.port, args.timeout)
     addons = rdp.request("root", "getRoot")["addonsActor"]
-    reply = rdp.request(addons, "installTemporaryAddon", addonPath=str(EXTENSION_DIR), openDevTools=False)
-    print(f"loaded {reply['addon']['id']} from {EXTENSION_DIR}")
+    path = args.dir.resolve()
+    reply = rdp.request(addons, "installTemporaryAddon", addonPath=str(path), openDevTools=False)
+    print(f"loaded {reply['addon']['id']} from {path}")
     return 0
 
 

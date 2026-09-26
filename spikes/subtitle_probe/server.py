@@ -27,6 +27,7 @@ class Log:
         self._lock = threading.Lock()
         self._last_sample: dict[object, int] = {}
         self._state: dict[object, tuple] = {}
+        self._clock: dict[object, tuple] = {}
 
     def write(self, event: dict) -> None:
         with self._lock:
@@ -43,7 +44,7 @@ class Log:
 
         tab = ev.get("tab")
         state = (ev.get("vis"), ev.get("focus"))
-        if self._state.get(tab) != state:
+        if "vis" in ev and self._state.get(tab) != state:
             self._state[tab] = state
             print(f"{YELLOW}{clock} tab {tab}: visibility={state[0]} focus={state[1]}{RESET}")
 
@@ -63,7 +64,15 @@ class Log:
             if not ev.get("capEl") and not ev.get("paused"):
                 print(f"{GRAY}{clock} no subtitle element on page (subtitles off?){RESET}")
         elif kind == "track":
-            print(f"{GREEN}{clock} captured {ev['kind']} track, {ev['size']} chars{RESET}")
+            about = f" lang={ev['lang']} movie={ev['movieId']}" if "lang" in ev else ""
+            print(f"{GREEN}{clock} captured {ev['kind']} track, {ev['size']} chars{about}{RESET}")
+        elif kind == "anchor":  # from the app's extension (extension/ at the repo root)
+            state = (ev.get("ad"), ev.get("clock"), ev.get("movieId"))
+            if ev["reason"] != "timeupdate" or self._clock.get(tab) != state:
+                self._clock[tab] = state
+                flags = " ".join(f for f, on in (("PAUSED", ev["paused"]), ("AD", ev["ad"])) if on)
+                print(f"{GRAY}{clock} anchor {ev['reason']:<14} vt={vt} rate={ev['rate']} "
+                      f"clock={ev['clock']} movie={ev['movieId']} {flags}{RESET}")
         elif kind == "media":
             if ev["what"] in ("play", "pause", "seeked", "ratechange"):
                 print(f"{GRAY}{clock} vt={vt}  [{ev['what']}]{RESET}")

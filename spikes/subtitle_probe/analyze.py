@@ -222,6 +222,7 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
     last_offset: float | None = None
     last_ahead: float | None = None
     last_seg = None
+    last_anchor = None
     last_video_count = None
 
     def say(ev: dict, text: str) -> None:
@@ -233,7 +234,14 @@ def timeline(events: list[dict], index: TrackIndex) -> None:
         if kind == "mark":
             say(ev, f"==== {ev['note']} ====")
         elif kind == "track":
-            say(ev, f"subtitle track: {ev['kind']}, {ev['size']} chars")
+            about = f", lang={ev['lang']}, movie={ev['movieId']}" if "lang" in ev else ""
+            say(ev, f"subtitle track: {ev['kind']}, {ev['size']} chars{about}")
+        elif kind == "anchor":  # from the app's extension; timeupdates only when state changes
+            state = (ev["ad"], ev["paused"], ev["clock"], ev["movieId"])
+            if ev["reason"] != "timeupdate" or state != last_anchor:
+                last_anchor = state
+                say(ev, f"anchor {ev['reason']}: vt={ev['vt']:.2f} rate={ev['rate']} paused={ev['paused']}"
+                        f" ad={ev['ad']} clock={ev['clock']} movie={ev['movieId']}")
         elif kind == "media" and ev["what"] not in ("play", "pause", "seeked", "ratechange"):
             say(ev, f"video #{ev.get('idx')} {ev['what']} (t={ev.get('evt')}, dur={ev.get('dur')})")
         elif kind == "media":
