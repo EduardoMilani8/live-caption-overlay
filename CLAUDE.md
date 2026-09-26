@@ -26,6 +26,7 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 .venv/bin/python -m live_caption bench f.wav   # tempo por passada, por modelo
 .venv/bin/python spikes/subtitle_probe/server.py --out probe.jsonl   # spike fase 3
 .venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl
+.venv/bin/python spikes/subtitle_probe/load_extension.py   # extensão temporária via RDP
 ```
 
 ## Arquitetura (até agora)
@@ -73,7 +74,16 @@ flutuante. Projeto pessoal, só Linux + PipeWire. Plano completo em `docs/PLAN.m
 - Captura é pós-volume do app: aba mutada = silêncio.
 - Chrome junta todas as abas num stream só; isolamento por aba só no Firefox.
 - Overlay no Wayland: usar PySide6 com `QT_QPA_PLATFORM=xcb` para "sempre no topo" funcionar.
-- Ao testar com `pw-play` em background, matar pelo PID — `pkill -f` casa com o próprio shell.
+- Ao testar com `pw-play` em background, matar pelo PID — `pkill -f` casa com o próprio shell
+  (vale para `pgrep -f` também; usar `pgrep -x firefox`).
+- Firefox é **snap** (perfil em `~/snap/firefox/common/.mozilla/firefox/eq6j1hce.default`,
+  `/tmp` privado). `--start-debugger-server` só abre a porta com
+  `devtools.debugger.remote-enabled` **e** `devtools.chrome.enabled`. Não usar WebDriver
+  BiDi para carregar a extensão: liga `navigator.webdriver`.
+- Netflix baixa o TTML (IMSC 1.1) do **episódio inteiro** ao abrir o player, além dos
+  das prévias em autoplay na `/browse`. Seletores `.player-timedtext*` confirmados.
+- O renderizador de legenda da Netflix desenha ~12% dos inícios de fala 0,4–1 s
+  atrasados (e às vezes pula uma fala curta), com a aba visível ou não.
 
 ## Onde paramos (atualizar ao fim de cada sessão)
 
@@ -84,12 +94,16 @@ janelinha always-on-top; ~2 s de atraso do Whisper incomoda, e as séries já t�
 legenda PT-BR na Netflix. Ver "Mudança de rumo" em `docs/PLAN.md`. Continua Python.
 
 Feito: spike `spikes/subtitle_probe/` (extensão + receptor + analisador) e parser
-`subs/timedtext.py` com testes. Testado só com log sintético e `web-ext lint`
-(o container não tem Firefox) — **falta rodar na máquina real** seguindo o README
-do spike e trazer a saída do `analyze.py`.
+`subs/timedtext.py` com testes. **Rodado na máquina real** (Netflix, ~11 min, 6
+cenários; tabela em `spikes/subtitle_probe/README.md`): visibilidade não muda nada
+(escondida/minimizada/outra aba = visível), extensão funcionou sem ajuste. O que
+limita "ler da tela" é o próprio renderizador da Netflix (inícios de fala até ~1 s
+atrasados em ~12% dos casos, 1 fala pulada), não a aba escondida.
 
-Próximo: com o resultado, escolher "ler da tela" vs. "sincronizar arquivo pelo
-`currentTime`" e reescrever as fases seguintes do `docs/PLAN.md`
+Próximo: dono decidir entre "ler da tela" e "sincronizar o arquivo pelo
+`currentTime`" (recomendação do Claude: arquivo, com o relógio no app Python e a
+extensão só mandando âncoras `currentTime`/play/pause/seek; tela como verificação)
+e então reescrever as fases seguintes do `docs/PLAN.md`
 (extensão definitiva → app receptor → overlay PySide6).
 
 ---

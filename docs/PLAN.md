@@ -119,7 +119,7 @@ Tauri/Electron não resolvem melhor o "sempre no topo" no Wayland (GTK4 removeu
 O plano completo das próximas fases é reescrito depois do spike abaixo, porque o
 resultado dele decide entre ler a legenda da tela ou sincronizar o arquivo inteiro.
 
-## Fase 3 — Spike: legenda direto do player (em andamento)
+## Fase 3 — Spike: legenda direto do player (medido em 2026-09-26)
 
 - **Código:** `spikes/subtitle_probe/` (roteiro de teste no README de lá);
   parser de TTML/WebVTT/json3 em `src/live_caption/subs/timedtext.py`.
@@ -132,6 +132,10 @@ resultado dele decide entre ler a legenda da tela ou sincronizar o arquivo intei
 - **Decisão que sai daqui:** se a legenda na tela chega em dia em todos os
   cenários → ler da tela (simples). Se não → interceptar o arquivo e sincronizar
   pelo `currentTime` do vídeo (robusto, permite pré-traduzir).
+- **Resultado:** a legenda na tela chega igual em todos os cenários (visibilidade
+  não importa), mas o renderizador da Netflix atrasa 0,4–1 s ~12% dos inícios de
+  fala e pulou uma fala curta, mesmo visível. O arquivo inteiro do episódio é
+  interceptado ao abrir o player. Detalhes em `spikes/subtitle_probe/README.md`.
 
 ## Tradução acoplada (era a fase 3; agora só para legenda em outro idioma)
 
