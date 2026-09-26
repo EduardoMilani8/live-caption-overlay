@@ -100,3 +100,47 @@ precisa commitar). Opcional: repetir com um vídeo do YouTube com legenda.
 - Heartbeat de 1 s não mostrou estrangulamento, mas também não detectaria o
   limite de 1 s que o Firefox aplica a timers de abas em segundo plano (e abas
   tocando áudio são isentas) — não medido com timer mais curto.
+
+## Teste 2: intervalos comerciais (plano Netflix com anúncios)
+
+A legenda sincronizada pelo arquivo depende de o relógio do vídeo ser o relógio
+do **conteúdo**. No plano com anúncios não sabemos o que a Netflix faz durante um
+intervalo: o `<video>` pode continuar contando (e aí a legenda fica adiantada
+pela duração do anúncio), o anúncio pode tocar em outro `<video>`, ou o player
+pode trocar de fonte. E o overlay não deve legendar o anúncio. Este teste mede
+isso. A extensão agora também registra:
+
+- todos os elementos `<video>` a cada segundo (tempo, duração, fonte);
+- marcadores `data-uia` da interface que aparecem e somem (é como o "Anúncio ·
+  0:30" deve aparecer) com o texto de cada um;
+- a API interna do player da Netflix: lista de métodos e, a cada segundo, os
+  valores dos métodos de consulta ligados a tempo e anúncio.
+
+Roteiro (recarregue a extensão e a página antes; mesmo servidor de antes, com
+outro arquivo de log):
+
+```sh
+.venv/bin/python spikes/subtitle_probe/server.py --out ads.jsonl
+```
+
+| Marcador | Ação |
+|---|---|
+| `pre-roll` | abrir um episódio **do começo**; deixar tocar o anúncio inicial (se houver) e ~1 min do episódio |
+| `mid-roll` | na barra de progresso, pular para ~20 s **antes** de uma marquinha de intervalo; deixar o anúncio inteiro tocar e mais ~1 min depois |
+| `pausa no anuncio` | (se aparecer outro intervalo) pausar uns segundos durante o anúncio e retomar |
+
+Sem mexer no vídeo fora dessas ações. Depois:
+
+```sh
+.venv/bin/python spikes/subtitle_probe/analyze.py ads.jsonl --timeline
+```
+
+`--timeline` imprime só as transições. O que procurar em volta do anúncio:
+
+- `ui + ...` com texto de anúncio = como detectar o intervalo pela tela;
+- `video#0.currentTime running` durante o anúncio e depois
+  `video time - subtitle file time = +NN s` = o `<video>` conta o anúncio (o app
+  vai precisar descontar); se continuar `+0.0x s`, não conta;
+- `2 <video> element(s)` / `video #1 loadedmetadata` = anúncio em elemento separado;
+- `api.<algo> frozen` durante o anúncio = a API tem o relógio do conteúdo;
+- `player API: ... ad-related: ...` = métodos com nome de anúncio para investigar.

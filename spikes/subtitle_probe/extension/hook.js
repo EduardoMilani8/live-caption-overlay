@@ -67,4 +67,51 @@
       return res;
     });
   };
+
+  // Ad-tier probe: Netflix's internal player API may know about ad breaks and
+  // the content clock. Only zero-argument get*/is* methods whose names hint at
+  // time or ads are called (read-only by convention); the full method list is
+  // sent once so we can see what else exists.
+  if (!location.hostname.includes("netflix")) return;
+  const INTERESTING = /time|ad|break|segment|position|playing|paused|duration|movie|pod/i;
+
+  function methodNames(obj) {
+    const names = new Set();
+    for (let o = obj; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+      for (const name of Object.getOwnPropertyNames(o)) {
+        try { if (typeof obj[name] === "function" && name !== "constructor") names.add(name); } catch (e) {}
+      }
+    }
+    return [...names].sort();
+  }
+
+  function snapshot(player) {
+    const values = {};
+    for (const name of methodNames(player)) {
+      if (!/^(get|is)/.test(name) || !INTERESTING.test(name) || player[name].length !== 0) continue;
+      try {
+        const v = player[name]();
+        if (v === undefined || typeof v === "function") continue;
+        values[name] = typeof v === "object" ? JSON.stringify(v).slice(0, 300) : v;
+      } catch (e) { /* some getters throw outside playback */ }
+    }
+    return values;
+  }
+
+  let describedSession = null;
+  setInterval(() => {
+    try {
+      const api = window.netflix?.appContext?.state?.playerApp?.getAPI?.().videoPlayer;
+      const ids = api?.getAllPlayerSessionIds?.() || [];
+      const players = ids.map((id) => [id, api.getVideoPlayerBySessionId(id)]).filter(([, p]) => p);
+      if (!players.length) return;
+      const event = { [TAG]: true, type: "napi", players: players.map(([id, p]) => ({ id, ...snapshot(p) })) };
+      const key = ids.join(",");
+      if (describedSession !== key) {
+        describedSession = key;
+        event.methods = methodNames(players[0][1]);
+      }
+      window.postMessage(event, location.origin);
+    } catch (e) { /* API missing or changed: nothing to report */ }
+  }, 1000);
 })();

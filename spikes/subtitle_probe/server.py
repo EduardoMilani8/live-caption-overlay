@@ -65,7 +65,19 @@ class Log:
         elif kind == "track":
             print(f"{GREEN}{clock} captured {ev['kind']} track, {ev['size']} chars{RESET}")
         elif kind == "media":
-            print(f"{GRAY}{clock} vt={vt}  [{ev['what']}]{RESET}")
+            if ev["what"] in ("play", "pause", "seeked", "ratechange"):
+                print(f"{GRAY}{clock} vt={vt}  [{ev['what']}]{RESET}")
+            else:
+                print(f"{GRAY}{clock} video #{ev.get('idx')} {ev['what']} "
+                      f"t={ev.get('evt')} dur={ev.get('dur')}{RESET}")
+        elif kind == "uia":
+            for name, text in ev["added"].items():
+                print(f"{GRAY}{clock} ui + {name}{'  ' + repr(text) if text else ''}{RESET}")
+            for name in ev["removed"]:
+                print(f"{GRAY}{clock} ui - {name}{RESET}")
+        elif kind == "napi" and "methods" in ev:
+            print(f"{GREEN}{clock} player API: {len(ev['methods'])} methods, "
+                  f"{len(ev['players'][0]) - 1} time/ad getters{RESET}")
         elif kind == "hello":
             print(f"{GRAY}{clock} probe loaded in tab {tab} ({ev['site']}{ev['path']}){RESET}")
 

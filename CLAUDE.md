@@ -53,7 +53,8 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
   WebVTT e json3 (YouTube) → lista de `Cue(start, end, text)`; `normalize` para casar
   texto da tela com o arquivo.
 - `spikes/subtitle_probe/` — extensão Firefox (MV3) + receptor HTTP local + analisador
-  para medir se a legenda do player chega em dia com a aba escondida.
+  para medir se a legenda do player chega em dia com a aba escondida (teste 1) e o
+  que acontece num intervalo comercial (teste 2, `analyze.py --timeline`).
 
 ## Fatos do ambiente que já custaram descoberta
 
@@ -104,7 +105,12 @@ trilha + âncoras de tempo, relógio fica no app Python. Fases reescritas em
 `docs/PLAN.md` (4 extensão definitiva → 5 receptor + relógio → 6 overlay →
 7 tradução → 8 reservas Whisper/música).
 
-Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`).
+Próximo: **Fase 4** — extensão definitiva (ver `docs/PLAN.md`), começando pelos
+**anúncios**: o dono usa o plano da Netflix com anúncios e não quer anúncio legendado.
+Probe estendido (vídeos, marcadores `data-uia`, API interna do player) e
+`analyze.py --timeline`, testados só com log sintético — **falta rodar o teste 2**
+do README do spike na máquina real e decidir como detectar o intervalo e
+descontar o anúncio do relógio.
 
 Pendência de limpeza: o perfil do Firefox tem um `user.js` que volta os prefs de
 depuração ao padrão no próximo início; depois disso pode ser apagado.

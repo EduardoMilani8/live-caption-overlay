@@ -7,13 +7,20 @@ showed are missed. Both are reported per scenario, which answers the spike's
 question: do subtitles keep flowing on time when the tab isn't visible?
 
     .venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl
+    .venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl --timeline
+
+--timeline prints only transitions (clocks freezing/jumping, videos and UI
+markers appearing, the video-vs-subtitle-file offset changing), which is
+what an ad break looks like from the player's side.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
@@ -56,6 +63,16 @@ class TrackIndex:
         candidates = {i for k in keys for i in self.by_text.get(k, ())}
         near = [i for i in candidates if self.cues[i][1].start - 1.0 <= vt <= self.cues[i][1].end + 5.0]
         return max(near, key=lambda i: self.cues[i][1].start, default=None)
+
+
+    def offset(self, text: str, vt: float) -> float | None:
+        """vt minus the start of the closest cue with this exact text, anywhere
+        in the track: stays ~0 while the video clock is the content clock."""
+        key = normalize(text)
+        if len(key) < 12:  # short lines ("Obrigado.") repeat too often
+            return None
+        starts = [self.cues[i][1].start for i in self.by_text.get(key, ())]
+        return min((vt - s for s in starts), key=abs, default=None)
 
 
 def pct(values: list[float], q: float) -> float:
@@ -163,15 +180,108 @@ def report(segments: list[Segment], index: TrackIndex, matched: set[int], active
             print(f"   unmatched: {text.replace(chr(10), ' / ')}")
 
 
+class ClockWatch:
+    """Classifies how a clock moved between two observations, relative to the
+    wall clock: running (either in seconds or ms), frozen, or jumped."""
+
+    def __init__(self) -> None:
+        self.last: dict[str, tuple[int, float]] = {}
+        self.state: dict[str, str] = {}
+
+    def update(self, name: str, t: int, value: float) -> str | None:
+        """Return a description when the clock's behaviour changes."""
+        prev = self.last.get(name)
+        self.last[name] = (t, value)
+        if prev is None:
+            self.state[name] = "seen"
+            return f"{name} = {value:.2f}"
+        wall_s = (t - prev[0]) / 1000
+        delta = value - prev[1]
+        if wall_s <= 0:
+            return None
+        if delta == 0:
+            state = "frozen"
+        elif abs(delta - wall_s) < 0.35 * wall_s + 0.3 or abs(delta - wall_s * 1000) < 0.35 * wall_s * 1000:
+            state = "running"
+        else:
+            state = "jump"
+        changed = state != self.state.get(name) or state == "jump"
+        self.state[name] = state
+        if not changed:
+            return None
+        return f"{name} {state} ({prev[1]:.2f} -> {value:.2f} in {wall_s:.1f} s)"
+
+
+def timeline(events: list[dict], index: TrackIndex) -> None:
+    clocks = ClockWatch()
+    last_values: dict[str, object] = {}
+    last_offset: float | None = None
+    last_video_count = None
+
+    def say(ev: dict, text: str) -> None:
+        clock = time.strftime("%H:%M:%S", time.localtime(ev["t"] / 1000))
+        print(f"{clock}  {text}")
+
+    for ev in events:
+        kind = ev["type"]
+        if kind == "mark":
+            say(ev, f"==== {ev['note']} ====")
+        elif kind == "track":
+            say(ev, f"subtitle track: {ev['kind']}, {ev['size']} chars")
+        elif kind == "media" and ev["what"] not in ("play", "pause", "seeked", "ratechange"):
+            say(ev, f"video #{ev.get('idx')} {ev['what']} (t={ev.get('evt')}, dur={ev.get('dur')})")
+        elif kind == "media":
+            say(ev, f"[{ev['what']}] vt={ev.get('vt')}")
+        elif kind == "uia":
+            for name, text in ev["added"].items():
+                say(ev, f"ui + {name}" + (f"  {text!r}" if text else ""))
+            for name in ev["removed"]:
+                say(ev, f"ui - {name}")
+        elif kind == "sample":
+            videos = ev.get("videos") or []
+            if len(videos) != last_video_count:
+                last_video_count = len(videos)
+                say(ev, f"{len(videos)} <video> element(s): " + ", ".join(v["src"] or "(no src)" for v in videos))
+            for i, v in enumerate(videos):
+                if v["paused"]:
+                    continue
+                if msg := clocks.update(f"video#{i}.currentTime", ev["t"], v["vt"]):
+                    say(ev, msg)
+        elif kind == "napi":
+            if "methods" in ev:
+                adish = [m for m in ev["methods"] if re.search(r"ad(?![a-z])|Ad|break|Break|pod|Pod", m)]
+                say(ev, f"player API: {len(ev['methods'])} methods; ad-related: {', '.join(adish) or 'none'}")
+            for player in ev["players"][:1]:
+                for name, value in player.items():
+                    if name == "id":
+                        continue
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        if msg := clocks.update(f"api.{name}", ev["t"], value):
+                            say(ev, msg)
+                    elif last_values.get(name) != value:
+                        last_values[name] = value
+                        say(ev, f"api.{name} = {value}")
+        elif kind == "cue" and ev["text"] and ev.get("vt") is not None:
+            off = index.offset(ev["text"], ev["vt"])
+            if off is not None and (last_offset is None or abs(off - last_offset) > 0.5):
+                last_offset = off
+                say(ev, f"video time - subtitle file time = {off:+.2f} s  ({ev['text'].splitlines()[0]!r})")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("log")
+    parser.add_argument("--timeline", action="store_true", help="print transitions only (ad breaks)")
     args = parser.parse_args()
     events = load(args.log)
     if not events:
         print("empty log")
         return 1
-    report(*analyze(events))
+    result = analyze(events)
+    if args.timeline:
+        timeline(events, result[1])
+    else:
+        report(*result)
     return 0
 
 

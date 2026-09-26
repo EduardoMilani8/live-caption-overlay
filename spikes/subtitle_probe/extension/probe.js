@@ -63,6 +63,19 @@
     emit({ type: "cue", text });
   }
 
+  let uiaSeen = new Map();
+  function diffUia() {
+    const now = new Map();
+    for (const el of document.querySelectorAll("[data-uia]")) {
+      const name = el.getAttribute("data-uia");
+      if (!now.has(name)) now.set(name, (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80));
+    }
+    const added = [...now].filter(([name]) => !uiaSeen.has(name));
+    const removed = [...uiaSeen.keys()].filter((name) => !now.has(name));
+    uiaSeen = now;
+    if (added.length || removed.length) emit({ type: "uia", added: Object.fromEntries(added), removed });
+  }
+
   function start() {
     // MutationObserver callbacks are microtasks, not timers, so background-tab
     // timer throttling does not delay them; only the player's own rendering can.
@@ -70,15 +83,25 @@
       subtree: true, childList: true, characterData: true,
     });
 
-    // Timer heartbeat: gaps between samples reveal timer throttling.
+    // Timer heartbeat: gaps between samples reveal timer throttling. It also
+    // records every <video> (an ad may play in a separate element) and diffs
+    // the player UI's data-uia markers, which is how an ad break shows up.
     setInterval(() => {
-      if (video()) emit({ type: "sample", capEl: !!document.querySelector(sel.container) });
+      if (!video()) return;
+      const videos = [...document.querySelectorAll("video")].map((v) => ({
+        vt: v.currentTime, dur: v.duration, paused: v.paused, src: v.currentSrc.slice(0, 60),
+      }));
+      emit({ type: "sample", capEl: !!document.querySelector(sel.container), videos });
+      diffUia();
     }, 1000);
 
-    for (const name of ["play", "pause", "seeked", "ratechange"]) {
+    const MEDIA_EVENTS = ["play", "pause", "seeked", "ratechange", "durationchange", "loadedmetadata", "emptied"];
+    for (const name of MEDIA_EVENTS) {
       // Media events don't bubble, but capture-phase listeners still see them.
       document.addEventListener(name, (e) => {
-        if (e.target instanceof HTMLMediaElement) emit({ type: "media", what: name });
+        if (!(e.target instanceof HTMLMediaElement)) return;
+        const idx = [...document.querySelectorAll("video")].indexOf(e.target);
+        emit({ type: "media", what: name, idx, evt: e.target.currentTime, dur: e.target.duration });
       }, true);
     }
     document.addEventListener("visibilitychange", () => emit({ type: "vis" }));

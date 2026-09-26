@@ -158,11 +158,25 @@ Netflix ─► extensão: arquivo TTML + âncoras de tempo ─HTTP local─► a
   mandando o texto da tela, só como verificação.
 - **Trilha ativa:** a Netflix também baixa legendas das prévias e de outros
   idiomas; a ativa é a do título em `/watch/<id>` que casa com o texto da tela.
+- **Anúncios (o dono usa o plano com anúncios):** o overlay **não legenda
+  anúncios**, e depois de um intervalo a legenda tem de continuar no tempo certo.
+  Primeiro medir (teste 2 do spike, `analyze.py --timeline`) o que a Netflix faz
+  num intervalo: se o `currentTime` do `<video>` conta o anúncio, se o anúncio
+  toca em outro `<video>`, como a interface marca o anúncio (`data-uia`), e se a
+  API interna do player tem o relógio do conteúdo. Com isso a extensão passa a
+  mandar âncoras `{…, ad: true}` durante o intervalo e âncoras em tempo de
+  **conteúdo** fora dele. Rede de segurança independente da Netflix: cada fala
+  que aparece na tela casa com o arquivo e revela o deslocamento real (o *fim*
+  das falas na tela é preciso, < 100 ms no spike), então o app corrige sozinho
+  se o relógio escorregar.
 - **Critério:** com o receptor do spike, um episódio mostra 1 trilha do título
   certo, âncoras em cada play/pause/seek, e uma trilha nova ao passar para o
-  próximo episódio ou trocar o idioma da legenda.
+  próximo episódio ou trocar o idioma da legenda. Num intervalo comercial, as
+  âncoras marcam `ad` do começo ao fim e, depois dele, o deslocamento vídeo ×
+  arquivo volta a ~0.
 - **Riscos:** legenda desligada no player → a Netflix não baixa arquivo (manter
-  ligada; esconder a da tela fica para depois); a Netflix mudar o formato.
+  ligada; esconder a da tela fica para depois); a Netflix mudar o formato;
+  anúncio sem nenhum sinal na página (aí só a rede de segurança pela tela).
 
 ## Fase 5 — App receptor + relógio (saída no terminal)
 
