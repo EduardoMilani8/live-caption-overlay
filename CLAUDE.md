@@ -28,6 +28,7 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
 .venv/bin/python spikes/subtitle_probe/server.py --out probe.jsonl   # spike fase 3
 .venv/bin/python spikes/subtitle_probe/analyze.py probe.jsonl
 .venv/bin/python spikes/subtitle_probe/load_extension.py   # extensão temporária via RDP
+                                           # (--dir extension para a definitiva)
 .venv/bin/python spikes/subtitle_probe/drive.py eval netflix.com/watch 'JS'  # JS na aba
                                            # (também: open URL, mark 'nota')
 ```
@@ -54,6 +55,10 @@ Linux + PipeWire. Plano completo em `docs/PLAN.md`.
 - `src/live_caption/subs/timedtext.py` — parser de TTML (Netflix, tempos em ticks),
   WebVTT e json3 (YouTube) → lista de `Cue(start, end, text)`; `normalize` para casar
   texto da tela com o arquivo.
+- `extension/` — extensão definitiva (fase 4). `page.js` roda no mundo da página:
+  intercepta o TTML, lê a API interna do player e manda âncoras em **tempo de
+  conteúdo** (anúncio descontado, `ad`/`paused` durante o intervalo) + texto da tela;
+  `content.js` só repassa; `background.js` faz POST em `127.0.0.1:8765/event`.
 - `spikes/subtitle_probe/` — extensão Firefox (MV3) + receptor HTTP local + analisador
   para medir se a legenda do player chega em dia com a aba escondida (teste 1) e o
   que acontece num intervalo comercial (teste 2, `analyze.py --timeline`).

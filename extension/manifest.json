@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Live Caption",
+  "version": "0.1.0",
+  "description": "Sends Netflix's subtitle file and content-time anchors to the local live-caption app.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "live-caption@local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  },
+  "host_permissions": [
+    "*://*.netflix.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "scripts": ["background.js"] },
+  "action": { "default_title": "Live Caption" },
+  "content_scripts": [
+    {
+      "matches": ["*://*.netflix.com/*"],
+      "js": ["page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.netflix.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
